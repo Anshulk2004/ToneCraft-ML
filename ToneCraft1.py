@@ -118,7 +118,7 @@ def upload_pdf():
         print(e)        
         return str(e), 500
 
-@app.route("/", methods=["POST"])
+@app.route("/", methods=["GET"])
 def home():
     return {'connected': True}
 
