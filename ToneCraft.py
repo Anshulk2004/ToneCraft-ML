@@ -50,7 +50,9 @@ def pdf_to_text(pdf_content):
             text += page.extract_text()
     
     os.remove(temp_pdf_path)
+    print(pdf_content)
     return text
+
 
 
 ##Applying the Basic SSML tags via AMAZON Polly

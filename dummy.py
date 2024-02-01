@@ -1,7 +1,7 @@
 import requests
 
 api_url = "http://127.0.0.1:8000/upload_pdf/"
-files = {'file': open("D:/pdfs/manas.pdf", 'rb')}
+files = {'file': open("D:/pdfs/sample1_pdf.pdf", 'rb')}
 # files = {'file': open(pdf_file_path, 'rb')}
 response = requests.post(api_url, files=files)
 
