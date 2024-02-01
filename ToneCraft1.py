@@ -8,7 +8,7 @@ from io import BytesIO
 import config
 from flask_cors import CORS
 
-app = Flask(_name_)
+app = Flask(__name__)
 # app.config['UPLOAD_EXTENSIONS'] = ['.pdf']
 # app.config['UPLOAD_PATH'] = './upload'
 CORS(app)
@@ -122,5 +122,5 @@ def upload_pdf():
 def home():
     return {'connected': True}
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     app.run(debug=True)
