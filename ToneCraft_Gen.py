@@ -50,9 +50,7 @@ def pdf_to_text(pdf_content):
             text += page.extract_text()
     
     os.remove(temp_pdf_path)
-    print(pdf_content)
     return text
-
 
 
 ##Applying the Basic SSML tags via AMAZON Polly
@@ -71,7 +69,7 @@ def polly(text, emotion):
     elif emotion == 'fear':
         text = applying_basic_polly(text, speaking_rate=1.3, volume='medium', pitch='medium', emphasis='strong')
     elif emotion == 'surprise':
-        text = applying_basic_polly(text, speaking_rate=1.3, volume='medium', emphasis='moderate')
+        text = applying_basic_polly(text, speaking_rate=1.4, volume='medium', emphasis='moderate')
     elif emotion == 'neutral':
         text = applying_basic_polly(text, speaking_rate=1.2, volume='soft', pitch='medium', emphasis='none')
     return text
@@ -79,17 +77,25 @@ def polly(text, emotion):
 
 ##Generating Audio files
 
-def generate_audio(text, output_format="mp3"):
+def generate_audio(text, output_format="mp3", voice_gender="male"):
+    # Assuming you have 'Matthew' for male and 'Joanna' for female
+    if voice_gender == "male":
+        voice_id = "Matthew"
+    elif voice_gender == "female":
+        voice_id = "Joanna"
+    else:
+        raise ValueError("Invalid voice gender. Please choose 'male' or 'female'.")
+
     emotion = predict_emotion(text)
-    text = polly(text,emotion)
-    
+    text = polly(text, emotion)
+
     client = boto3.client('polly', aws_access_key_id=get_settings().AWS_AK, aws_secret_access_key=get_settings().AWS_SAK, region_name='us-east-1')
-    voice_id = 'Matthew'
-    # text = polly(text, emotion='neutral')  
+
     results = client.synthesize_speech(Text=text, OutputFormat=output_format, VoiceId=voice_id, TextType='ssml')
     audio = results['AudioStream'].read()
     encoded_audio = base64.b64encode(audio).decode('utf-8')
     return encoded_audio
+
 
 
 ##Storing the chunks in a separate folder called Chunks
@@ -121,43 +127,40 @@ def clean_audio_folder(folder_path):
 ##Using the FAST-API Interface
 
 @app.post("/upload_pdf/")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(file: UploadFile = File(...), voice_gender: str = "male"):
     try:
-        
-        pdf_content = await file.read()        
+        pdf_content = await file.read()
         pdf_text = pdf_to_text(pdf_content)
-        
+
         chunk_size = 400
-        text_chunks = [pdf_text[i:i+chunk_size] for i in range(0, len(pdf_text), chunk_size)]
-        
-        ##Generate audio for each chunk and save to folder
-        
+        text_chunks =  [pdf_text[i:i+chunk_size] for i in range(0, len(pdf_text), chunk_size)]
+
+        # Generate audio for each chunk and save to folder
         audio_folder = create_audio_folder()
         audio_files = []
         for i, chunk in enumerate(text_chunks):
-            audio_data = generate_audio(chunk)
-            
-            ##Save each audio chunk to the folder
+            audio_data = generate_audio(chunk, voice_gender=voice_gender)
+
+            # Save each audio chunk to the folder
             audio_filename = os.path.join(audio_folder, f"audio_chunk_{i + 1}.mp3")
             audio_files.append(audio_filename)
             with open(audio_filename, "wb") as audio_file:
-                audio_file.write(base64.b64decode(audio_data))        
-       
+                audio_file.write(base64.b64decode(audio_data))
+
         combined_audio = b""
         for audio_file in audio_files:
             with open(audio_file, "rb") as file:
                 combined_audio += file.read()
 
-        ##Return the combined audio using StreamingResponse
-        
+        # Return the combined audio using StreamingResponse
         response = StreamingResponse(iter([combined_audio]), media_type="audio/mpeg", headers={"Content-Disposition": "attachment;filename=combined_audiotw.mp3"})
 
-        ##Cleaning the audio 
+        # Cleaning the audio folder
         clean_audio_folder(audio_folder)
         return response
-    
+
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=f"Error: {e}")
+
 
 ##END

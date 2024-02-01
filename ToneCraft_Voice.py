@@ -50,9 +50,7 @@ def pdf_to_text(pdf_content):
             text += page.extract_text()
     
     os.remove(temp_pdf_path)
-    print(pdf_content)
     return text
-
 
 
 ##Applying the Basic SSML tags via AMAZON Polly
@@ -79,18 +77,36 @@ def polly(text, emotion):
 
 ##Generating Audio files
 
-def generate_audio(text, output_format="mp3"):
-    emotion = predict_emotion(text)
-    text = polly(text,emotion)
+def generate_audio(text, output_format="mp3", voice_language="en-US", voice_gender="male"):
+    # Language and speaker mapping
+    language_speakers = {
+    "en-US": {"male": "Matthew", "female": "Joanna"},
+    "es-ES": {"male": "Enrique", "female": "Conchita"},
+    "hi-IN": {"female": "Aditi"},
+    "de-DE": {"female": "Vicki", "male": "Hans"},
+    "ru-RU": {"female": "Tatyana", "male": "Maxim"},
+    "fr-FR": {"female": "Lea", "male": "Mathieu"},
+}
+
+    # Validate language and gender inputs
+    if voice_language not in language_speakers:
+        raise ValueError("Invalid language. Please choose from: en-US, es-ES, hi-IN, de-DE")
     
+    if voice_gender not in language_speakers[voice_language]:
+        raise ValueError(f"Invalid gender for the chosen language. Available genders: {', '.join(language_speakers[voice_language].keys())}")
+
+    # Get the voice ID based on language and gender
+    voice_id = language_speakers[voice_language][voice_gender]
+
+    emotion = predict_emotion(text)
+    text = polly(text, emotion)
+
     client = boto3.client('polly', aws_access_key_id=get_settings().AWS_AK, aws_secret_access_key=get_settings().AWS_SAK, region_name='us-east-1')
-    voice_id = 'Matthew'
-    # text = polly(text, emotion='neutral')  
+
     results = client.synthesize_speech(Text=text, OutputFormat=output_format, VoiceId=voice_id, TextType='ssml')
     audio = results['AudioStream'].read()
     encoded_audio = base64.b64encode(audio).decode('utf-8')
     return encoded_audio
-
 
 ##Storing the chunks in a separate folder called Chunks
 
@@ -121,43 +137,39 @@ def clean_audio_folder(folder_path):
 ##Using the FAST-API Interface
 
 @app.post("/upload_pdf/")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(file: UploadFile = File(...), voice_language: str = "en-US", voice_gender: str = "male"):
     try:
-        
-        pdf_content = await file.read()        
+        pdf_content = await file.read()
         pdf_text = pdf_to_text(pdf_content)
-        
+
         chunk_size = 400
-        text_chunks = [pdf_text[i:i+chunk_size] for i in range(0, len(pdf_text), chunk_size)]
-        
-        ##Generate audio for each chunk and save to folder
-        
+        text_chunks =  [pdf_text[i:i+chunk_size] for i in range(0, len(pdf_text), chunk_size)]
+
+        # Generate audio for each chunk and save to folder
         audio_folder = create_audio_folder()
         audio_files = []
         for i, chunk in enumerate(text_chunks):
-            audio_data = generate_audio(chunk)
-            
-            ##Save each audio chunk to the folder
+            audio_data = generate_audio(chunk, voice_language=voice_language, voice_gender=voice_gender)
+
+            # Save each audio chunk to the folder
             audio_filename = os.path.join(audio_folder, f"audio_chunk_{i + 1}.mp3")
             audio_files.append(audio_filename)
             with open(audio_filename, "wb") as audio_file:
-                audio_file.write(base64.b64decode(audio_data))        
-       
+                audio_file.write(base64.b64decode(audio_data))
+
         combined_audio = b""
         for audio_file in audio_files:
             with open(audio_file, "rb") as file:
                 combined_audio += file.read()
 
-        ##Return the combined audio using StreamingResponse
-        
+        # Return the combined audio using StreamingResponse
         response = StreamingResponse(iter([combined_audio]), media_type="audio/mpeg", headers={"Content-Disposition": "attachment;filename=combined_audiotw.mp3"})
 
-        ##Cleaning the audio 
+        # Cleaning the audio folder
         clean_audio_folder(audio_folder)
         return response
-    
+
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=f"Error: {e}")
 
 ##END
